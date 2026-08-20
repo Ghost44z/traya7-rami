@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Jeu de Rami en ligne</title>
+  <style>
+    html { background: radial-gradient(ellipse at center, #2a2a2a 0%, #121212 70%); min-height: 100%; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 34px 24px 56px;
+      text-align: center; color: white; position: relative; border-radius: 70px;
+      background:
+        radial-gradient(ellipse at 28% 18%, rgba(255,255,255,0.08), transparent 50%),
+        radial-gradient(ellipse at center, #1a7a42 0%, #0f5c30 55%, #0a4423 100%);
+      border: 14px solid #5c3a1f;
+      box-shadow:
+        0 0 0 4px #3d2712,
+        0 0 0 6px #6b4826,
+        0 25px 60px rgba(0,0,0,0.65),
+        inset 0 0 90px rgba(0,0,0,0.4);
+    }
+    body::before {
+      content: '';
+      position: absolute; inset: 10px; border-radius: 58px;
+      background-image: repeating-radial-gradient(circle at 0 0, rgba(255,255,255,0.025) 0, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 7px);
+      pointer-events: none;
+    }
+    input { padding: 8px; margin: 8px; width: 200px; border-radius: 4px; border: none; }
+    button { padding: 8px 20px; cursor: pointer; border-radius: 4px; border: none; background: #f0ad4e; font-weight: bold; margin: 4px; transition: transform 0.1s ease, filter 0.15s ease; }
+    button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+    button:disabled { background: #6b6b6b; color: #ccc; cursor: not-allowed; }
+
+    /* Écran de fin de partie (vainqueur / game over) */
+    #ecran-fin {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.88); align-items: center; justify-content: center;
+      flex-direction: column; text-align: center; overflow: hidden;
+    }
+    #ecran-fin.actif { display: flex; }
+    .poster {
+      padding: 50px 60px; border-radius: 24px; position: relative; z-index: 2;
+      animation: poster-entree 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+    }
+    @keyframes poster-entree {
+      from { transform: scale(0.6) rotate(-4deg); opacity: 0; }
+      to { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    .poster-vainqueur {
+      background: linear-gradient(160deg, #3a2c05, #1a1400);
+      border: 4px solid #ffd166; box-shadow: 0 0 60px rgba(255,209,102,0.5), 0 0 0 8px rgba(255,209,102,0.15);
+    }
+    .poster-vainqueur h2 {
+      font-size: 52px; margin: 0 0 10px; color: #ffd166; letter-spacing: 3px;
+      text-shadow: 0 0 20px rgba(255,209,102,0.8), 0 0 40px rgba(255,209,102,0.4);
+      animation: pulse-or 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse-or { 0%,100% { text-shadow: 0 0 20px rgba(255,209,102,0.8), 0 0 40px rgba(255,209,102,0.4); } 50% { text-shadow: 0 0 32px rgba(255,209,102,1), 0 0 60px rgba(255,209,102,0.7); } }
+    .poster-perdant {
+      background: linear-gradient(160deg, #3a0a0a, #170202);
+      border: 4px solid #c0392b; box-shadow: 0 0 60px rgba(192,57,43,0.5);
+      animation: poster-entree 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3), tremble 0.4s ease-in-out 0.5s 2;
+    }
+    @keyframes tremble { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+    .poster-perdant h2 {
+      font-size: 52px; margin: 0 0 10px; color: #ff5c4d; letter-spacing: 3px;
+      text-shadow: 0 0 20px rgba(255,60,40,0.7);
+    }
+    .poster p.sous-titre { font-size: 16px; opacity: 0.85; margin: 0 0 24px; }
+    .poster button { margin-top: 10px; }
+
+    .confetti { position: absolute; top: -20px; width: 9px; height: 14px; opacity: 0.9; animation: tomber linear forwards; z-index: 1; }
+    @keyframes tomber {
+      to { transform: translateY(105vh) rotate(540deg); opacity: 0.3; }
+    }
+    #joueurs { text-align: left; display: inline-block; }
+
+    .carte {
+      display: inline-flex; flex-direction: column; justify-content: space-between;
+      width: 62px; height: 88px; background: linear-gradient(160deg, #ffffff, #f4f4f4);
+      color: #1a1a1a; border-radius: 8px; margin: 4px; padding: 5px 6px;
+      font-family: 'Georgia', 'Times New Roman', serif; font-weight: bold;
+      cursor: pointer; user-select: none; position: relative;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.5) inset;
+      border: 1px solid rgba(0,0,0,0.15);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      vertical-align: top;
+    }
+    .carte:hover { transform: translateY(-6px); box-shadow: 0 8px 14px rgba(0,0,0,0.4); }
+    .carte.non-cliquable { cursor: default; }
+    .carte.non-cliquable:hover { transform: none; box-shadow: 0 2px 4px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.5) inset; }
+    .carte.selectionnee {
+      transform: translateY(-12px);
+      box-shadow: 0 0 0 3px #f0ad4e, 0 10px 16px rgba(0,0,0,0.45);
+    }
+    .carte .coin { font-size: 13px; line-height: 1; display: flex; flex-direction: column; align-items: center; }
+    .carte .coin.bas { align-self: flex-end; transform: rotate(180deg); }
+    .carte .centre { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 22px; }
+    .carte.rouge { color: #c0392b; }
+    .carte.joker { background: linear-gradient(160deg, #fff6d8, #ffe9a8); }
+    .carte.joker .centre { font-size: 24px; color: #b8860b; }
+    .carte.joker .coin { color: #9a7b0a; }
+
+    #zone-jeu { display: none; margin-top: 20px; }
+
+    #main-joueur {
+      position: sticky; bottom: 0; z-index: 6;
+      margin: 26px -10px -30px; padding: 18px 20px 26px;
+      background: linear-gradient(180deg, rgba(51,32,17,0) 0%, rgba(51,32,17,0.75) 25%, rgba(37,23,12,0.95) 100%);
+      border-top: 3px solid #d4af6a; border-radius: 40px 40px 0 0;
+      box-shadow: 0 -10px 22px rgba(0,0,0,0.4);
+      text-align: left;
+    }
+    #main-joueur strong { display: block; text-align: center; margin-bottom: 6px; letter-spacing: 0.5px; }
+    #main-joueur .carte { margin: 4px 3px; }
+
+    #combinaisons {
+      margin-top: 20px; text-align: left; padding: 12px 16px; border-radius: 12px;
+      background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08);
+    }
+    #zone-actions { margin: 10px 0; }
+    #groupes-en-attente-conteneur { text-align: left; margin: 14px 0 6px; min-height: 20px; }
+    #groupes-en-attente-conteneur strong { font-size: 14px; opacity: 0.85; }
+    #groupes-en-attente > div { display: inline-block; background: rgba(0,0,0,0.25); border-radius: 10px; padding: 6px 8px; margin: 4px 6px 4px 0; vertical-align: top; }
+
+    #zone-pioche-defausse { display: flex; justify-content: center; align-items: flex-end; gap: 40px; margin: 18px 0; }
+    .pile-conteneur { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .pile-label { font-size: 13px; opacity: 0.85; font-weight: bold; }
+
+    .paquet {
+      width: 62px; height: 88px; border-radius: 8px; cursor: pointer;
+      background: repeating-linear-gradient(135deg, #7a1f2b, #7a1f2b 6px, #921f2e 6px, #921f2e 12px);
+      border: 2px solid #d4af6a; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.15);
+      position: relative;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .paquet::before, .paquet::after {
+      content: ''; position: absolute; left: 3px; right: -3px; height: 100%;
+      border-radius: 8px; background: inherit; border: 2px solid #d4af6a; z-index: -1;
+    }
+    .paquet::before { top: -3px; }
+    .paquet::after { top: -6px; }
+    .paquet:hover:not(.desactive) { transform: translateY(-4px); box-shadow: 0 6px 12px rgba(0,0,0,0.4), inset 0 0 0 2px rgba(255,255,255,0.15); }
+    .paquet.desactive { cursor: not-allowed; opacity: 0.45; }
+
+    #defausse .carte.emplacement-vide { background: rgba(255,255,255,0.08); box-shadow: none; border: 2px dashed rgba(255,255,255,0.3); }
+    #defausse .carte { cursor: default; }
+    #defausse .carte.peut-piocher { cursor: pointer; }
+    #defausse .carte.peut-piocher:hover { transform: translateY(-4px); box-shadow: 0 0 0 2px #f0ad4e, 0 8px 14px rgba(0,0,0,0.4); }
+    #message-erreur { color: #ff6b6b; font-weight: bold; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🃏 Jeu de Rami</h1>
+
+  <div id="zone-connexion">
+    <input id="pseudo" placeholder="Ton pseudo" />
+    <input id="salon" placeholder="Nom du salon" value="salon-test" />
+    <button onclick="rejoindre()">Rejoindre le salon</button>
+  </div>
+
+  <h3>Joueurs connectés :</h3>
+  <ul id="joueurs"></ul>
+  <button id="btn-demarrer" onclick="demarrerPartie()" style="display:none;">Démarrer la partie</button>
+
+  <div id="zone-jeu">
+    <p id="info-donneur" style="opacity:0.85; font-style: italic;"></p>
+    <p id="info-tour"></p>
+    <p id="statut-ouverture" style="opacity:0.85;"></p>
+    <div id="zone-pioche-defausse">
+      <div class="pile-conteneur">
+        <div id="paquet-visuel" class="paquet" title="Cliquer pour piocher dans le paquet"></div>
+        <div class="pile-label">Paquet (<span id="nb-pioche"></span>)</div>
+      </div>
+      <div class="pile-conteneur">
+        <div id="defausse">
+          <div class="carte non-cliquable emplacement-vide"><span class="centre" style="font-size:11px; opacity:0.6;">vide</span></div>
+        </div>
+        <div class="pile-label">Défausse <span style="opacity:0.7; font-weight:normal;">(double-clic)</span></div>
+      </div>
+    </div>
+    <div id="zone-actions">
+      <span id="zone-ouverture">
+        <button onclick="ajouterGroupe()">Bakowetik</button>
+        <button onclick="ouvrir()">Habyt</button>
+      </span>
+      <button onclick="defausser()" id="btn-defausser">Tayich carta</button>
+      <button onclick="passer()" id="btn-passer" style="display:none; background:#c0392b; color:white;">Passer (garder la carte)</button>
+      <span id="zone-normale" style="display:none;">
+        <button onclick="poserCombinaison()">Poser la sélection</button>
+      </span>
+    </div>
+    <p id="alerte-obligation" style="color:#ffd166; font-weight:bold;"></p>
+    <p id="message-erreur"></p>
+    <div id="groupes-en-attente-conteneur">
+      <strong>Compositions sélectionnées :</strong>
+      <div id="groupes-en-attente"></div>
+    </div>
+    <div id="combinaisons"><strong>Combinaisons posées sur la table :</strong><div id="liste-combinaisons"></div></div>
+    <div id="main-joueur"><strong>Ta main :</strong><br/></div>
+  </div>
+
+  <div id="ecran-fin"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let cartesSelectionnees = new Set();
+    let mainActuelle = [];
+    let groupesEnAttente = []; // tableaux d'ids de cartes, pour l'ouverture
+    let etatJoueursConnu = []; // dernière liste connue des joueurs (id + pseudo), pour l'écran de fin
+    let symboles = { coeur: '♥', carreau: '♦', trefle: '♣', pique: '♠' };
+
+    function rejoindre() {
+      const pseudo = document.getElementById('pseudo').value || 'Anonyme';
+      const salonId = document.getElementById('salon').value || 'salon-test';
+      socket.emit('rejoindre-salon', { salonId, pseudo });
+    }
+
+    function demarrerPartie() {
+      socket.emit('demarrer-partie');
+    }
+
+    function piocher(depuisDefausse) {
+      socket.emit('piocher', { depuisDefausse });
+    }
+
+    function defausser() {
+      if (cartesSelectionnees.size !== 1) {
+        afficherErreur('Sélectionne une seule carte à défausser.');
+        return;
+      }
+      const carteId = [...cartesSelectionnees][0];
+      socket.emit('defausser', { carteId });
+      cartesSelectionnees.clear();
+    }
+
+    function passer() {
+      socket.emit('passer');
+    }
+
+    function poserCombinaison() {
+      if (cartesSelectionnees.size < 3) {
+        afficherErreur('Sélectionne au moins 3 cartes pour former une combinaison.');
+        return;
+      }
+      socket.emit('poser-combinaison', { cartesIds: [...cartesSelectionnees] });
+      cartesSelectionnees.clear();
+    }
+
+    function ajouterGroupe() {
+      if (cartesSelectionnees.size < 3) {
+        afficherErreur('Un groupe doit contenir au moins 3 cartes.');
+        return;
+      }
+      groupesEnAttente.push([...cartesSelectionnees]);
+      cartesSelectionnees.clear();
+      afficherGroupesEnAttente();
+      afficherMain();
+    }
+
+    function afficherGroupesEnAttente() {
+      const zone = document.getElementById('groupes-en-attente');
+      zone.innerHTML = '';
+      groupesEnAttente.forEach((groupeIds, index) => {
+        const ligne = document.createElement('div');
+        ligne.style.margin = '4px 0';
+        groupeIds.forEach(id => {
+          const carte = mainActuelle.find(c => c.id === id);
+          if (carte) ligne.appendChild(rendreCarte(carte, false));
+        });
+        const btnRetirer = document.createElement('button');
+        btnRetirer.textContent = 'Retirer ce groupe';
+        btnRetirer.onclick = () => { groupesEnAttente.splice(index, 1); afficherGroupesEnAttente(); afficherMain(); };
+        ligne.appendChild(btnRetirer);
+        zone.appendChild(ligne);
+      });
+    }
+
+    function afficherMain() {
+      const idsDansGroupes = new Set(groupesEnAttente.flat());
+      const mainDiv = document.getElementById('main-joueur');
+      mainDiv.innerHTML = '<strong>Ta main :</strong><br/>';
+      mainActuelle
+        .filter(c => !idsDansGroupes.has(c.id))
+        .forEach(c => mainDiv.appendChild(rendreCarte(c, true)));
+    }
+
+    function ouvrir() {
+      if (groupesEnAttente.length === 0) {
+        afficherErreur('Ajoute au moins un groupe avant d\'ouvrir.');
+        return;
+      }
+      socket.emit('ouvrir', { groupes: groupesEnAttente });
+      groupesEnAttente = [];
+      afficherGroupesEnAttente();
+      afficherMain();
+    }
+
+    function afficherErreur(msg) {
+      document.getElementById('message-erreur').textContent = msg;
+      setTimeout(() => document.getElementById('message-erreur').textContent = '', 3000);
+    }
+
+    function rendreCarte(carte, cliquable) {
+      const div = document.createElement('div');
+      const rouge = carte.couleur === 'coeur' || carte.couleur === 'carreau';
+      div.className = 'carte' + (rouge ? ' rouge' : '') + (carte.joker ? ' joker' : '') + (cliquable ? '' : ' non-cliquable');
+
+      if (carte.joker) {
+        div.innerHTML = `
+          <span class="coin">★</span>
+          <span class="centre">🃏</span>
+          <span class="coin bas">★</span>
+        `;
+      } else {
+        const symbole = symboles[carte.couleur] || '';
+        div.innerHTML = `
+          <span class="coin">${carte.valeur}<br/>${symbole}</span>
+          <span class="centre">${symbole}</span>
+          <span class="coin bas">${carte.valeur}<br/>${symbole}</span>
+        `;
+      }
+
+      if (cliquable) {
+        div.onclick = () => {
+          if (cartesSelectionnees.has(carte.id)) {
+            cartesSelectionnees.delete(carte.id);
+            div.classList.remove('selectionnee');
+          } else {
+            cartesSelectionnees.add(carte.id);
+            div.classList.add('selectionnee');
+          }
+        };
+      }
+      return div;
+    }
+
+    socket.on('salon-mis-a-jour', (salon) => {
+      const liste = document.getElementById('joueurs');
+      liste.innerHTML = '';
+      salon.joueurs.forEach(j => {
+        const li = document.createElement('li');
+        li.textContent = j.pseudo;
+        liste.appendChild(li);
+      });
+      if (salon.joueurs.length >= 2 && !salon.partie) {
+        document.getElementById('btn-demarrer').style.display = 'inline-block';
+      }
+    });
+
+    socket.on('partie-demarree', ({ donneurPseudo }) => {
+      document.getElementById('zone-connexion').style.display = 'none';
+      document.getElementById('btn-demarrer').style.display = 'none';
+      document.getElementById('zone-jeu').style.display = 'block';
+      if (donneurPseudo) {
+        document.getElementById('info-donneur').textContent = `Donneur : ${donneurPseudo} (a coupé le paquet et distribué les cartes)`;
+      }
+    });
+
+    socket.on('etat-partie', (etat) => {
+      document.getElementById('nb-pioche').textContent = etat.nbCartesPioche;
+      mainActuelle = etat.maMain;
+      etatJoueursConnu = etat.joueurs;
+
+      const defausseDiv = document.getElementById('defausse');
+      defausseDiv.innerHTML = '';
+      const derniereCarte = etat.defausse[etat.defausse.length - 1];
+      let peutPiocherDefausseActuellement = false;
+      if (derniereCarte) {
+        const carteDefausse = rendreCarte(derniereCarte, false);
+        defausseDiv.appendChild(carteDefausse);
+      } else {
+        defausseDiv.innerHTML = '<div class="carte non-cliquable emplacement-vide"><span class="centre" style="font-size:11px; opacity:0.6;">vide</span></div>';
+      }
+
+      afficherMain();
+
+      const combDiv = document.getElementById('liste-combinaisons');
+      combDiv.innerHTML = '';
+      etat.combinaisonsPosees.forEach(comb => {
+        const ligne = document.createElement('div');
+        comb.cartes.forEach(c => ligne.appendChild(rendreCarte(c, false)));
+        combDiv.appendChild(ligne);
+      });
+
+      const infoTour = document.getElementById('info-tour');
+      const estMonTour = etat.tourActuel === socket.id;
+      const joueurActuel = etat.joueurs.find(j => j.id === etat.tourActuel);
+      const nomJoueurActuel = joueurActuel ? joueurActuel.pseudo : '...';
+      const doitSauterPioche = estMonTour && etat.phase === 'jouer' && !etat.aDejaPiocheCeTour;
+      const deuxiemeTourEtMonTour = estMonTour && etat.numeroTour === 2 && etat.phase === 'piocher';
+      infoTour.textContent = estMonTour
+        ? (doitSauterPioche
+            ? (etat.premierTourDeLaPartie
+                ? "C'est le premier tour de la partie : tu ne pioches pas, joue directement avec tes 15 cartes."
+                : "Tu as gardé une carte en trop la dernière fois : tu ne pioches pas ce tour-ci, défausse directement.")
+            : `C'est ton tour (${etat.phase === 'piocher' ? 'pioche une carte' : 'pose ou défausse'})${deuxiemeTourEtMonTour ? ' — au 2e tour, pioche uniquement dans le paquet' : ''}`)
+        : `C'est le tour de ${nomJoueurActuel} — howa ytayich`;
+
+      const peutPiocherPaquet = estMonTour && etat.phase === 'piocher' && !doitSauterPioche;
+      const peutPiocherDefausse = peutPiocherPaquet && !deuxiemeTourEtMonTour && !!derniereCarte;
+
+      const paquetVisuel = document.getElementById('paquet-visuel');
+      paquetVisuel.classList.toggle('desactive', !peutPiocherPaquet);
+      paquetVisuel.onclick = peutPiocherPaquet ? () => piocher(false) : null;
+
+      const carteDefausseDom = defausseDiv.querySelector('.carte');
+      if (carteDefausseDom) {
+        carteDefausseDom.classList.toggle('peut-piocher', peutPiocherDefausse);
+        carteDefausseDom.title = peutPiocherDefausse ? 'Double-clique pour piocher cette carte' : '';
+        carteDefausseDom.ondblclick = peutPiocherDefausse ? () => piocher(true) : null;
+      }
+
+      const statutOuverture = document.getElementById('statut-ouverture');
+      const groupesConteneur = document.getElementById('groupes-en-attente-conteneur');
+      if (etat.estOuvert) {
+        statutOuverture.textContent = '✅ Tu as ouvert : tu peux poser librement des combinaisons.';
+        document.getElementById('zone-ouverture').style.display = 'none';
+        document.getElementById('zone-normale').style.display = 'inline';
+        groupesConteneur.style.display = 'none';
+      } else {
+        statutOuverture.textContent = "🔒 Tu n'as pas encore ouvert : il te faut au moins 51 points au total, avec au moins une tierce franche parmi tes groupes. Tu peux piocher librement (paquet ou défausse) pour réunir ces cartes, mais tu ne peux pas encore poser de combinaison.";
+        document.getElementById('zone-ouverture').style.display = 'inline';
+        document.getElementById('zone-normale').style.display = 'none';
+        groupesConteneur.style.display = 'block';
+      }
+
+      const alerteObligation = document.getElementById('alerte-obligation');
+      const btnDefausser = document.getElementById('btn-defausser');
+      const btnPasser = document.getElementById('btn-passer');
+      if (etat.doitOuvrirCeTour && !etat.estOuvert) {
+        alerteObligation.textContent = "⚠️ Tu as pioché dans la défausse sans ouvrir : ouvre maintenant, ou clique 'Passer' pour garder la carte (tu joueras sans piocher au tour suivant).";
+        btnDefausser.disabled = true;
+        btnPasser.style.display = 'inline-block';
+      } else {
+        alerteObligation.textContent = '';
+        btnDefausser.disabled = false;
+        btnPasser.style.display = 'none';
+      }
+    });
+
+    function genererConfettis(conteneur, nombre) {
+      const couleurs = ['#ffd166', '#f0ad4e', '#ff6b6b', '#4ecdc4', '#c8e070', '#ffffff'];
+      for (let i = 0; i < nombre; i++) {
+        const morceau = document.createElement('div');
+        morceau.className = 'confetti';
+        morceau.style.left = Math.random() * 100 + '%';
+        morceau.style.background = couleurs[Math.floor(Math.random() * couleurs.length)];
+        morceau.style.animationDuration = (2 + Math.random() * 2) + 's';
+        morceau.style.animationDelay = (Math.random() * 1.2) + 's';
+        conteneur.appendChild(morceau);
+      }
+    }
+
+    socket.on('partie-terminee', ({ gagnantId }) => {
+      const ecran = document.getElementById('ecran-fin');
+      const gagnantPseudo = (etatJoueursConnu.find(j => j.id === gagnantId) || {}).pseudo || 'Un joueur';
+      const jaiGagne = gagnantId === socket.id;
+
+      if (jaiGagne) {
+        ecran.innerHTML = `
+          <div class="poster poster-vainqueur">
+            <h2>🏆 VAINQUEUR</h2>
+            <p class="sous-titre">Tu as posé toutes tes cartes en premier !</p>
+            <button onclick="document.getElementById('ecran-fin').classList.remove('actif')">Fermer</button>
+          </div>
+        `;
+        genererConfettis(ecran, 60);
+      } else {
+        ecran.innerHTML = `
+          <div class="poster poster-perdant">
+            <h2>💀 GAME OVER</h2>
+            <p class="sous-titre">${gagnantPseudo} a gagné cette manche.</p>
+            <button onclick="document.getElementById('ecran-fin').classList.remove('actif')">Fermer</button>
+          </div>
+        `;
+      }
+      ecran.classList.add('actif');
+    });
+
+    socket.on('erreur', (msg) => afficherErreur(msg));
+  </script>
+</body>
+</html>
